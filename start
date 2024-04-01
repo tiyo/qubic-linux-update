@@ -1,0 +1,140 @@
+#!/bin/bash
+
+# 本地服务器更新脚本
+# Qubic-Solutions local update script
+# Linux( mobile )
+# 作者: tiyo (Discord: tiyo)
+
+# 需要搭建本地服务器，将rqiner-aarch64文件放置在服务器上
+# Need to set up a local server and place the rqiner-aarch64 file on the server
+
+# 移动端需要进入ubuntu后执行
+# Mobile needs to enter ubuntu to execute
+
+# 文件需要加可执行权限 chmod +x start
+# The file needs to be executable chmod +x start
+
+# 执行方式 ./start ， 自动获取本地服务器上的rqiner-aarch64文件并执行
+# Execute ./start, automatically get the rqiner-aarch64 file on the local server and execute it
+
+# 获取当前脚本的名称
+# Get the name of the current script
+
+# 脚本运行时按下Ctrl+C，关掉tail输出，但是rqiner-aarch64进程仍在后台运行
+# Press Ctrl+C while the script is running to turn off the tail output, but the rqiner-aarch64 process is still running in the background
+
+# 使用 ./start -kill 命令可以杀死rqiner-aarch64进程
+# Use ./start -kill command to kill the rqiner-aarch64 process
+
+# 移动端ubuntu没有系统服务功能，鉴于Qubic-Solutions作者将会在未来提供自动更新，所以此脚本暂时不提供定时功能
+# Mobile ubuntu does not have system service function, in view of Qubic-Solutions author will provide automatic update in the future, so this script does not provide timing function temporarily
+
+task_name=$(basename "$0")
+
+# 检查jq是否已安装，如果未安装则进行安装
+if ! command -v jq &> /dev/null; then
+    echo "jq未安装，开始安装..."
+    echo  "jq is not installed, installing..." 
+    apt-get update && apt-get install -y jq || { echo "jq安装失败"; echo  "Failed to install jq"; exit 1; }
+    echo "jq安装完成！"
+    echo  "jq installation complete!" 
+
+fi
+
+readonly SETUP_FILE="setup.json"
+
+# 检查setup.json文件是否存在，如果不存在则生成并编辑后继续执行脚本
+# Check if setup.json file exists, if not, generate and edit it before continuing with the script
+# SETUP FORMAT 
+#{
+#  "executable_file": "rqiner-aarch64-mobile", <--- executable file name
+#  "download_url": "http://192.168.1.8/qubic/", <--- local server
+#  "thread": 8, <--- thread
+#  "id": "0", <--- label
+#  "wallet": "TPLSBKKZUIIYCFXNWT" <--- wallet address
+#}
+if [ ! -f "$SETUP_FILE" ]; then
+  cat << EOF > $SETUP_FILE 
+{
+  "executable_file": "rqiner-aarch64-mobile",
+  "download_url": "http://192.168.1.8/qubic/",
+  "thread": 8,
+  "id": "0",
+  "wallet": "TPLSBKKZUIIYCFXNWTWIISRHUIRCAOJFKPHCIQUECFQXZXXUKKCWQIOBPCOJ"
+}
+EOF
+
+echo "已生成$SETUP_FILE，请编辑后继续"  
+echo  "$SETUP_FILE has been generated. Please edit it before proceeding." 
+
+exit 1  
+fi
+
+readonly DOWNLOAD_FILE='download'
+readonly EXECUTABLE_FILE=$(jq -r '.executable_file' $SETUP_FILE)
+readonly DOWNLOAD_URL=$(jq -r '.download_url' $SETUP_FILE)
+readonly THREAD=$(jq -r '.thread' $SETUP_FILE)
+readonly WALLET=$(jq -r '.wallet' $SETUP_FILE)
+readonly ID=$(jq -r '.id' $SETUP_FILE)
+
+# 判断命令行参数中是否包含"-kill"选项，并执行相应操作
+# Check if -kill option is present in command line arguments and perform corresponding operation
+
+if [[ "${@}" == *"-kill"* ]]; then 
+   # 执行指定命令...
+   # Execute specified command...
+
+   echo "执行 kill 命令..."
+   echo 'Executing kill command...'
+
+   ps -ef | grep "$EXECUTABLE_FILE" | grep -v grep | awk '{print $2}' | xargs kill -9
+   exit 1
+fi
+
+echo "当前的executable_file为：$EXECUTABLE_FILE"
+echo  "Current executable_file: $EXECUTABLE_FILE" 
+
+#echo "当前的download_url为：$DOWNLOAD_URL$EXECUTABLE_FILE"
+
+echo "当前的Thread为：$THREAD"
+echo  "Current Thread: $THREAD" 
+
+# echo "当前的Wallet为：$WALLET"
+echo "当前的ID为：$ID"
+echo  "Current ID: $ID" 
+
+
+# 使用wget下载rqiner-aarch64文件并保存到指定路径
+# Use wget to download rqiner-aarch64 file and save it to specified path
+
+if wget -O "$DOWNLOAD_FILE" "$DOWNLOAD_URL$EXECUTABLE_FILE"; then
+    
+    echo "文件更新成功！"
+    echo 'File update successful!'
+
+
+    # 检查是否已经存在名为rqiner-aarch64的进程，并杀死它
+    # Check if there is already a process named rqiner-aarch64 and kill it
+    ps -ef | grep "$EXECUTABLE_FILE" | grep -v grep | awk '{print $2}' | xargs kill -9
+
+    # 删除已存在的rqiner-aarch64文件（如果有）
+    # Remove existing rqiner-aarch64 file (if any)
+    rm -f "$EXECUTABLE_FILE"
+
+    # 替换文件
+    # Replace the file
+    mv "$DOWNLOAD_FILE" "$EXECUTABLE_FILE"
+
+    # 添加可执行权限给rqiner-aarch64文件
+    # Add executable permission to rqiner-aarch64 file
+    chmod +x "$EXECUTABLE_FILE"
+
+    # 执行executable_file命令，传递thread和wallet参数
+    # Execute the executable_file command, passing thread and wallet parameters
+    nohup ./"$EXECUTABLE_FILE" -t $THREAD -i $WALLET -l $ID > nohup.out 2>&1 &
+
+    sleep 1
+
+    tail -f nohup.out
+
+fi
